@@ -1,0 +1,23 @@
+{
+  "_comment": "Static seed prompts. Used when a category's prompt_source = 'fallback', or when prompt_source = 'generate' fails and generator_fallback_on_error is true. Each category is a list; the script rotates through them by cycle number.",
+
+  "code": [
+    "Write a thread-safe, generic bounded blocking queue in Java (without using java.util.concurrent.BlockingQueue) supporting blocking put/take, timed offer/poll, and a clean shutdown. Document the concurrency strategy. Then write comprehensive JUnit 5 tests, including a multi-producer/multi-consumer stress test that verifies no lost or duplicated elements.",
+    "Implement a thread-safe concurrent LRU cache in Java with a configurable capacity, supporting get/put with O(1) average operations and correct eviction under concurrent access. Explain how you guarantee thread-safety. Then write JUnit 5 tests including a concurrency stress test that checks invariants under heavy parallel load.",
+    "Implement a token-bucket rate limiter in Java that is safe for use by many threads, supporting a configurable refill rate and burst capacity, with both blocking acquire and non-blocking tryAcquire. Document the design. Then write JUnit 5 tests, including a concurrent test verifying the long-run rate does not exceed the configured limit."
+  ],
+
+  "text": [
+    "Write an in-depth, approximately 1000-line article on best practices in nonprofit grant writing: from researching funders and crafting a compelling needs statement to budgets, logic models, and post-award reporting. Use clear headings, concrete examples, and practical checklists.",
+    "Write an in-depth, approximately 1000-line article on grant compliance and acquittals: what acquittal reporting is, common requirements across government and philanthropic funders, record-keeping, audits, and how to avoid the most frequent compliance failures. Use headings and real-world examples.",
+    "Write an in-depth, approximately 1000-line article on how grant management software streamlines the full grant lifecycle for funders and grantees: application intake, assessment, disbursement, reporting, and impact measurement. Use headings, examples, and a feature comparison framework."
+  ],
+
+  "email": [
+    "Reply professionally to this email in at least 200 words:\n\nSubject: Question about eligibility for the Community Resilience Grant\n\nHi,\n\nI'm the coordinator of a small volunteer-run community garden in a regional town, and we're considering applying for your Community Resilience Grant round that closes next month. Before we invest time in a full application, I wanted to confirm a few eligibility points. We are not yet a registered charity, though we do operate under the auspices of our local council, which holds the relevant insurances on our behalf. We have an annual turnover of roughly $40,000, almost all of which comes from a weekly produce stall and small membership fees. Our project would involve installing rainwater tanks and a shade structure so we can keep operating through increasingly hot summers. Could you let me know whether unincorporated groups auspiced by a council are eligible, whether there is a minimum or maximum grant amount, and whether infrastructure of this kind is considered an eligible cost? I'd also appreciate any guidance on what supporting documents we should prepare. Thanks very much for your help.\n\nKind regards,\nJamie"
+  ],
+
+  "image": [
+    "Generate an image that visually explains this feature: When a user submits a grant application in the web app, the system automatically sends a confirmation email to the applicant and a notification email to the assigned assessor. The email includes the application reference number and a link to view the submission."
+  ]
+}

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenRouter Free-Model Benchmark</title>
+<style>
+  :root {
+    --bg: #0f1117; --panel: #181b24; --border: #262a36; --text: #e6e8ee;
+    --muted: #8b91a3; --accent: #6ea8fe; --ok: #3fb950; --err: #f85149;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.5;
+  }
+  header { padding: 24px 20px 8px; }
+  h1 { margin: 0; font-size: 22px; }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  main { padding: 12px 20px 60px; max-width: 1100px; margin: 0 auto; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+  .tab {
+    padding: 6px 14px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--panel); color: var(--muted); cursor: pointer; font-size: 13px;
+  }
+  .tab.active { color: var(--text); border-color: var(--accent); }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; margin-bottom: 18px;
+  }
+  .card h2 { margin: 0 0 4px; font-size: 15px; }
+  .card .meta { color: var(--muted); font-size: 12px; margin-bottom: 12px; word-break: break-word; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; cursor: pointer; user-select: none; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .model { font-family: ui-monospace, monospace; font-size: 12px; }
+  .pill { padding: 1px 7px; border-radius: 999px; font-size: 11px; }
+  .pill.ok { background: rgba(63,185,80,.15); color: var(--ok); }
+  .pill.err { background: rgba(248,81,73,.15); color: var(--err); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .empty { color: var(--muted); padding: 24px; text-align: center; }
+  .links a { margin-right: 10px; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OpenRouter Free-Model Benchmark</h1>
+  <div class="sub" id="status">Loading…</div>
+</header>
+<main>
+  <div class="tabs" id="tabs"></div>
+  <div id="leaderboard"></div>
+  <div id="latest"></div>
+</main>
+
+<script>
+const CATEGORIES = ["code", "text", "email", "image"];
+let DATA = { runs: [] };
+let activeCat = "code";
+
+async function load() {
+  try {
+    const res = await fetch("results.json?t=" + Date.now());
+    if (!res.ok) throw new Error("no results.json yet");
+    DATA = await res.json();
+    render();
+  } catch (e) {
+    document.getElementById("status").textContent =
+      "No results yet — run the benchmark workflow once to populate this dashboard.";
+  }
+}
+
+function fmt(n) { return (n === null || n === undefined || n === "") ? "—" : n; }
+function avg(arr) { return arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null; }
+
+function allRowsForCat(cat) {
+  const rows = [];
+  for (const run of DATA.runs || []) {
+    for (const r of run.results || []) {
+      if (r.category === cat) rows.push({ ...r, run_id: run.run_id, cycle: run.cycle });
+    }
+  }
+  return rows;
+}
+
+function buildLeaderboard(cat) {
+  const rows = allRowsForCat(cat);
+  const byModel = {};
+  for (const r of rows) {
+    const m = (byModel[r.model_id] = byModel[r.model_id] || {
+      model: r.model_id, runs: 0, ok: 0, tout: [], lat: [], chars: [] });
+    m.runs++;
+    if (r.status === "ok") {
+      m.ok++;
+      if (r.tokens_out) m.tout.push(r.tokens_out);
+      if (r.latency_ms) m.lat.push(r.latency_ms);
+      if (r.response_chars) m.chars.push(r.response_chars);
+    }
+  }
+  return Object.values(byModel).map(m => ({
+    model: m.model,
+    runs: m.runs,
+    success: Math.round((m.ok / m.runs) * 100),
+    avgTokensOut: avg(m.tout),
+    avgLatencyMs: avg(m.lat),
+    avgChars: avg(m.chars),
+  })).sort((a, b) => (b.avgTokensOut || 0) - (a.avgTokensOut || 0));
+}
+
+function renderTabs() {
+  const el = document.getElementById("tabs");
+  el.innerHTML = "";
+  for (const c of CATEGORIES) {
+    const t = document.createElement("div");
+    t.className = "tab" + (c === activeCat ? " active" : "");
+    t.textContent = c;
+    t.onclick = () => { activeCat = c; render(); };
+    el.appendChild(t);
+  }
+}
+
+function renderLeaderboard() {
+  const board = buildLeaderboard(activeCat);
+  const host = document.getElementById("leaderboard");
+  if (!board.length) {
+    host.innerHTML = `<div class="card"><div class="empty">No data for "${activeCat}" yet.</div></div>`;
+    return;
+  }
+  let html = `<div class="card"><h2>Leaderboard — ${activeCat}</h2>
+    <div class="meta">Averaged across all recorded runs (${board.reduce((a,b)=>a+b.runs,0)} calls)</div>
+    <table><thead><tr>
+      <th>Model</th>
+      <th class="num">Avg tokens out</th>
+      <th class="num">Avg latency</th>
+      <th class="num">Avg length</th>
+      <th class="num">Success</th>
+      <th class="num">Runs</th>
+    </tr></thead><tbody>`;
+  for (const r of board) {
+    html += `<tr>
+      <td class="model">${r.model}</td>
+      <td class="num">${fmt(r.avgTokensOut)}</td>
+      <td class="num">${r.avgLatencyMs ? (r.avgLatencyMs/1000).toFixed(1)+"s" : "—"}</td>
+      <td class="num">${fmt(r.avgChars)}</td>
+      <td class="num">${r.success}%</td>
+      <td class="num">${r.runs}</td>
+    </tr>`;
+  }
+  html += `</tbody></table></div>`;
+  host.innerHTML = html;
+}
+
+function renderLatest() {
+  const host = document.getElementById("latest");
+  const run = (DATA.runs || [])[0];
+  if (!run) { host.innerHTML = ""; return; }
+  const rows = (run.results || []).filter(r => r.category === activeCat);
+  if (!rows.length) { host.innerHTML = ""; return; }
+  const title = (run.prompts && run.prompts[activeCat]) || "";
+  let html = `<div class="card"><h2>Latest run — ${activeCat}</h2>
+    <div class="meta">${run.run_id} · cycle ${run.cycle}<br>Prompt: ${escapeHtml(title)}</div>
+    <table><thead><tr>
+      <th>Model</th><th>Status</th>
+      <th class="num">Tokens in</th><th class="num">Tokens out</th>
+      <th class="num">Latency</th><th class="num">Length</th><th>Output</th>
+    </tr></thead><tbody>`;
+  for (const r of rows) {
+    const links = [];
+    if (r.response_file) links.push(`<a href="${r.response_file}" target="_blank">text</a>`);
+    if (r.image_file) links.push(`<a href="${r.image_file}" target="_blank">image</a>`);
+    html += `<tr>
+      <td class="model">${r.model_id}</td>
+      <td><span class="pill ${r.status === "ok" ? "ok" : "err"}">${r.status}</span></td>
+      <td class="num">${fmt(r.tokens_in)}</td>
+      <td class="num">${fmt(r.tokens_out)}</td>
+      <td class="num">${r.latency_ms ? (r.latency_ms/1000).toFixed(1)+"s" : "—"}</td>
+      <td class="num">${fmt(r.response_chars)}</td>
+      <td class="links">${links.join("") || (r.error ? `<span style="color:var(--muted)">${escapeHtml(r.error.slice(0,80))}</span>` : "—")}</td>
+    </tr>`;
+  }
+  html += `</tbody></table></div>`;
+  host.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
+}
+
+function render() {
+  renderTabs();
+  renderLeaderboard();
+  renderLatest();
+  const n = (DATA.runs || []).length;
+  const last = (DATA.runs || [])[0];
+  document.getElementById("status").textContent =
+    n ? `${n} run(s) recorded · latest ${last.run_id}` : "No runs yet.";
+}
+
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>

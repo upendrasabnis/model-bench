@@ -1,0 +1,19 @@
+{
+  "_comment": "Your own prompts. Used when a category's prompt_source = 'manual'. Each category may be a single string OR a list of strings (rotated by cycle number). Edit these to whatever you want to send to every model.",
+
+  "code": [
+    "Write a thread-safe work-stealing thread pool in Java with per-worker deques, supporting task submission, graceful shutdown, and awaitTermination. Document the concurrency strategy and write comprehensive JUnit 5 tests including a stress test."
+  ],
+
+  "text": [
+    "Write an in-depth, approximately 1000-line article on the global landscape of research and academic grants: major funding bodies, the peer-review process, success rates, common pitfalls in proposals, and trends in open science funding. Use clear headings and examples."
+  ],
+
+  "email": [
+    "Reply professionally to this email in at least 200 words:\n\nSubject: Acquittal report overdue for Grant #2025-118\n\nDear grantee,\n\nOur records show that the final acquittal report for Grant #2025-118 was due three weeks ago and has not yet been received. Please submit the completed financial acquittal and outcomes report, along with copies of receipts for all expenditure over $500, within ten business days. If there are reasons for the delay, let us know so we can discuss options.\n\nRegards,\nGrants Administration Team"
+  ],
+
+  "image": [
+    "Generate an image that visually explains this feature: an automated reminder system in a grants web app that emails applicants three days before their report is due, then escalates to the program manager if the report is still missing on the due date."
+  ]
+}

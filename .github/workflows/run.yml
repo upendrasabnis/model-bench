@@ -1,0 +1,53 @@
+name: Benchmark Run
+
+on:
+  schedule:
+    # Every hour, on the hour (UTC). GitHub cron is best-effort and may be delayed under load.
+    - cron: "0 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bench-run
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run benchmark
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: python scripts/run_benchmark.py
+
+      - name: Commit and push results
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add results.xlsx results.json state.json prompt_history.json responses images
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "bench: run $(date -u '+%Y-%m-%d %H:%M UTC')"
+            for i in 1 2 3; do
+              git push && break
+              git pull --rebase && sleep 2
+            done
+            echo "Results committed and pushed"
+          fi

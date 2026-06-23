@@ -1,0 +1,54 @@
+{
+  "_comment": "All behaviour is driven from this file. Edit freely; no code changes needed.",
+
+  "max_in_flight": 10,
+  "request_timeout_seconds": 120,
+  "max_retries": 3,
+  "retry_backoff_seconds": 5,
+  "dashboard_history_runs": 500,
+
+  "generator_model": "openai/gpt-oss-120b:free",
+  "generator_temperature": 0.9,
+  "generator_fallback_on_error": true,
+  "prompt_history_keep": 20,
+
+  "defaults": {
+    "max_input_chars": 8000,
+    "max_output_tokens": 4096,
+    "max_response_store_chars": 200000,
+    "temperature": 0.7
+  },
+
+  "models": [
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "qwen/qwen3-coder:free",
+    "openai/gpt-oss-120b:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "google/gemma-4-31b-it:free",
+    "qwen/qwen3-next-80b-a3b-instruct:free",
+    "cohere/north-mini-code:free",
+    "nousresearch/hermes-3-llama-3.1-405b:free"
+  ],
+
+  "categories": {
+    "code": {
+      "enabled": true,
+      "prompt_source": "generate",
+      "max_output_tokens": 6000
+    },
+    "text": {
+      "enabled": true,
+      "prompt_source": "generate",
+      "max_output_tokens": 8000
+    },
+    "email": {
+      "enabled": true,
+      "prompt_source": "generate"
+    },
+    "image": {
+      "enabled": false,
+      "prompt_source": "generate",
+      "models_override": ["google/gemini-3.1-flash-image"]
+    }
+  }
+}
