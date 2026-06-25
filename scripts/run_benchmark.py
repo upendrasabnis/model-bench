@@ -43,6 +43,7 @@ RESULTS_JSON = os.path.join(ROOT, "results.json")
 RESPONSES_DIR = os.path.join(ROOT, "responses")
 IMAGES_DIR = os.path.join(ROOT, "images")
 PROMPTS_DIR = os.path.join(ROOT, "prompts")
+TREND_JSON = os.path.join(ROOT, "trend.json")
 
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -323,6 +324,41 @@ def update_results_json(rows, run_meta, keep_runs):
     save_json(RESULTS_JSON, data)
 
 
+def update_trend_json(rows, run_id, timestamp_utc, cycle, keep_runs):
+    """
+    Compact trend file: one entry per run containing only the metrics needed
+    for charting (no prompt text, no error strings). Stays small forever.
+
+    Structure: { "runs": [ { "run_id", "ts", "cycle", "points": [
+        { "cat", "model", "ok", "tokens_out", "latency_ms", "response_chars" }, ...
+    ] }, ... ] }
+    """
+    data = load_json(TREND_JSON, default={"runs": []})
+    if not isinstance(data, dict):
+        data = {"runs": []}
+
+    points = []
+    for r in rows:
+        points.append({
+            "cat":    r["category"],
+            "model":  r["model_id"],
+            "ok":     1 if r["status"] == "ok" else 0,
+            "tout":   r["tokens_out"] if r["tokens_out"] != "" else None,
+            "lat":    r["latency_ms"] if r["latency_ms"] != "" else None,
+            "chars":  r["response_chars"] if r["response_chars"] else None,
+        })
+
+    data["runs"].append({
+        "run_id": run_id,
+        "ts":     timestamp_utc,
+        "cycle":  cycle,
+        "points": points,
+    })
+    # Keep oldest-first order (append to end); dashboard reads left-to-right as time.
+    data["runs"] = data["runs"][-keep_runs:]
+    save_json(TREND_JSON, data)
+
+
 # --------------------------------------------------------------------------- #
 # Main
 # --------------------------------------------------------------------------- #
@@ -398,7 +434,7 @@ def main():
             log(f"  done {category}/{model}: {res['status']} "
                 f"({res.get('latency_ms')}ms, out={res.get('tokens_out')})")
 
-    # 4) Write Excel + JSON.
+    # 4) Write Excel + JSON + trend.
     if rows:
         append_to_excel(rows)
         update_results_json(
@@ -406,6 +442,10 @@ def main():
             {"run_id": run_id, "timestamp_utc": now.isoformat(), "cycle": cycle,
              "prompts": {c: prompts[c]["title"] for c in prompts}},
             config.get("dashboard_history_runs", 500),
+        )
+        update_trend_json(
+            rows, run_id, now.isoformat(), cycle,
+            config.get("trend_history_runs", 200),
         )
 
     # 5) Advance state + history.

@@ -40,7 +40,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add results.xlsx results.json state.json prompt_history.json responses images
+          git add results.xlsx results.json trend.json state.json prompt_history.json responses images
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else

@@ -18,7 +18,7 @@
   h1 { margin: 0; font-size: 22px; }
   .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
   main { padding: 12px 20px 60px; max-width: 1100px; margin: 0 auto; }
-  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 4px; }
   .tab {
     padding: 6px 14px; border: 1px solid var(--border); border-radius: 999px;
     background: var(--panel); color: var(--muted); cursor: pointer; font-size: 13px;
@@ -32,7 +32,7 @@
   .card .meta { color: var(--muted); font-size: 12px; margin-bottom: 12px; word-break: break-word; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 600; cursor: pointer; user-select: none; }
+  th { color: var(--muted); font-weight: 600; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .model { font-family: ui-monospace, monospace; font-size: 12px; }
   .pill { padding: 1px 7px; border-radius: 999px; font-size: 11px; }
@@ -42,6 +42,29 @@
   a:hover { text-decoration: underline; }
   .empty { color: var(--muted); padding: 24px; text-align: center; }
   .links a { margin-right: 10px; font-size: 12px; }
+
+  /* trend chart */
+  .chart-controls { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .chart-controls label { color: var(--muted); font-size: 12px; }
+  .chart-controls select {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 4px 8px; font-size: 12px;
+  }
+  #chart-wrap { width: 100%; overflow-x: auto; }
+  svg.trend-chart { display: block; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; font-family: ui-monospace, monospace; color: var(--muted); cursor: pointer; }
+  .legend-swatch { width: 12px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+  .legend-item.hidden { opacity: 0.35; }
+
+  /* tooltip */
+  #tip {
+    position: fixed; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; font-size: 12px; pointer-events: none;
+    opacity: 0; transition: opacity .1s; max-width: 240px; z-index: 100;
+  }
+  #tip .tip-head { font-weight: 600; margin-bottom: 4px; }
+  #tip .tip-row { color: var(--muted); }
 </style>
 </head>
 <body>
@@ -51,79 +74,272 @@
 </header>
 <main>
   <div class="tabs" id="tabs"></div>
+
+  <!-- trend chart -->
+  <div class="card" id="trend-card">
+    <h2>Trend</h2>
+    <div class="meta" id="trend-meta">Loading trend data…</div>
+    <div class="chart-controls">
+      <label>Metric</label>
+      <select id="metric-sel">
+        <option value="tout">Tokens out</option>
+        <option value="lat">Latency (ms)</option>
+        <option value="chars">Response chars</option>
+        <option value="ok">Success (1=ok, 0=error)</option>
+      </select>
+      <label style="margin-left:12px">Show last</label>
+      <select id="window-sel">
+        <option value="20">20 runs</option>
+        <option value="50" selected>50 runs</option>
+        <option value="100">100 runs</option>
+        <option value="all">All</option>
+      </select>
+    </div>
+    <div id="chart-wrap"></div>
+    <div class="legend" id="chart-legend"></div>
+  </div>
+
+  <!-- leaderboard -->
   <div id="leaderboard"></div>
+
+  <!-- latest run -->
   <div id="latest"></div>
 </main>
 
+<div id="tip"><div class="tip-head" id="tip-head"></div><div id="tip-body"></div></div>
+
 <script>
+// ── data ──────────────────────────────────────────────────────────────────────
 const CATEGORIES = ["code", "text", "email", "image"];
-let DATA = { runs: [] };
+let DATA   = { runs: [] };   // results.json
+let TREND  = { runs: [] };   // trend.json (oldest-first)
 let activeCat = "code";
 
+// palette — 10 distinct colours that work on dark bg
+const PALETTE = [
+  "#6ea8fe","#3fb950","#f8a52e","#e06cfc","#58d9e0","#f85149",
+  "#ffd166","#a5d6a7","#b39ddb","#ffab91"
+];
+const modelColor = (() => {
+  const map = {};
+  let idx = 0;
+  return m => { if (!map[m]) map[m] = PALETTE[idx++ % PALETTE.length]; return map[m]; };
+})();
+
+// hidden-model set persists across re-renders
+const hiddenModels = new Set();
+
+// ── load ─────────────────────────────────────────────────────────────────────
 async function load() {
-  try {
-    const res = await fetch("results.json?t=" + Date.now());
-    if (!res.ok) throw new Error("no results.json yet");
-    DATA = await res.json();
-    render();
-  } catch (e) {
+  const [r1, r2] = await Promise.allSettled([
+    fetch("results.json?t=" + Date.now()).then(r => r.ok ? r.json() : Promise.reject()),
+    fetch("trend.json?t="   + Date.now()).then(r => r.ok ? r.json() : Promise.reject()),
+  ]);
+  if (r1.status === "fulfilled") DATA  = r1.value;
+  if (r2.status === "fulfilled") TREND = r2.value;
+  if (r1.status === "rejected" && r2.status === "rejected") {
     document.getElementById("status").textContent =
       "No results yet — run the benchmark workflow once to populate this dashboard.";
+    return;
   }
+  render();
 }
 
-function fmt(n) { return (n === null || n === undefined || n === "") ? "—" : n; }
-function avg(arr) { return arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null; }
+// ── helpers ───────────────────────────────────────────────────────────────────
+const fmt  = n => (n === null || n === undefined || n === "") ? "—" : n;
+const esc  = s => (s||"").replace(/[&<>"]/g, c=>({
+  "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+function avg(arr) { return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null; }
 
 function allRowsForCat(cat) {
   const rows = [];
-  for (const run of DATA.runs || []) {
-    for (const r of run.results || []) {
-      if (r.category === cat) rows.push({ ...r, run_id: run.run_id, cycle: run.cycle });
-    }
-  }
+  for (const run of DATA.runs||[])
+    for (const r of run.results||[])
+      if (r.category === cat) rows.push({...r, run_id: run.run_id, cycle: run.cycle});
   return rows;
 }
-
 function buildLeaderboard(cat) {
   const rows = allRowsForCat(cat);
-  const byModel = {};
+  const bm = {};
   for (const r of rows) {
-    const m = (byModel[r.model_id] = byModel[r.model_id] || {
-      model: r.model_id, runs: 0, ok: 0, tout: [], lat: [], chars: [] });
+    const m = bm[r.model_id] = bm[r.model_id] || { model:r.model_id, runs:0, ok:0, tout:[], lat:[], chars:[] };
     m.runs++;
     if (r.status === "ok") {
       m.ok++;
-      if (r.tokens_out) m.tout.push(r.tokens_out);
-      if (r.latency_ms) m.lat.push(r.latency_ms);
+      if (r.tokens_out)     m.tout.push(r.tokens_out);
+      if (r.latency_ms)     m.lat.push(r.latency_ms);
       if (r.response_chars) m.chars.push(r.response_chars);
     }
   }
-  return Object.values(byModel).map(m => ({
-    model: m.model,
-    runs: m.runs,
-    success: Math.round((m.ok / m.runs) * 100),
-    avgTokensOut: avg(m.tout),
-    avgLatencyMs: avg(m.lat),
-    avgChars: avg(m.chars),
-  })).sort((a, b) => (b.avgTokensOut || 0) - (a.avgTokensOut || 0));
+  return Object.values(bm).map(m=>({
+    model: m.model, runs: m.runs,
+    success: Math.round(m.ok/m.runs*100),
+    avgTokensOut: avg(m.tout) !== null ? Math.round(avg(m.tout)) : null,
+    avgLatencyMs: avg(m.lat)  !== null ? Math.round(avg(m.lat))  : null,
+    avgChars:     avg(m.chars)!== null ? Math.round(avg(m.chars)): null,
+  })).sort((a,b)=>(b.avgTokensOut||0)-(a.avgTokensOut||0));
 }
 
-function renderTabs() {
-  const el = document.getElementById("tabs");
-  el.innerHTML = "";
-  for (const c of CATEGORIES) {
-    const t = document.createElement("div");
-    t.className = "tab" + (c === activeCat ? " active" : "");
-    t.textContent = c;
-    t.onclick = () => { activeCat = c; render(); };
-    el.appendChild(t);
+// ── trend chart ───────────────────────────────────────────────────────────────
+function trendRunsForCat(cat) {
+  const windowVal = document.getElementById("window-sel").value;
+  let runs = (TREND.runs||[]).filter(r => r.points && r.points.some(p=>p.cat===cat));
+  if (windowVal !== "all") runs = runs.slice(-Number(windowVal));
+  return runs;
+}
+
+function drawChart(cat) {
+  const metric  = document.getElementById("metric-sel").value;
+  const runs    = trendRunsForCat(cat);
+  const wrap    = document.getElementById("chart-wrap");
+  const legEl   = document.getElementById("chart-legend");
+  const metaEl  = document.getElementById("trend-meta");
+
+  if (!runs.length) {
+    wrap.innerHTML = `<div class="empty">No trend data for "${cat}" yet.</div>`;
+    legEl.innerHTML = ""; metaEl.textContent = "Trend across runs — appears after the first benchmark run.";
+    return;
   }
+
+  metaEl.textContent =
+    `${runs.length} run(s) · cycle ${runs[0].cycle}–${runs[runs.length-1].cycle} · `+
+    `${new Date(runs[0].ts).toLocaleString()} → ${new Date(runs[runs.length-1].ts).toLocaleString()}`;
+
+  // gather all models that appear in these runs for this category
+  const modelsSet = new Set();
+  for (const r of runs)
+    for (const p of r.points||[])
+      if (p.cat === cat) modelsSet.add(p.model);
+  const models = [...modelsSet];
+
+  // build series: model → array of {x: runIndex, y: value|null}
+  const series = {};
+  for (const m of models) {
+    series[m] = runs.map((r, xi) => {
+      const p = (r.points||[]).find(p2=>p2.cat===cat && p2.model===m);
+      return { x: xi, y: (p && p[metric] !== undefined && p[metric] !== null) ? p[metric] : null };
+    });
+  }
+
+  // SVG geometry
+  const W = Math.max(600, runs.length * 18);
+  const H = 260;
+  const PAD = { top:20, right:20, bottom:36, left:62 };
+  const CW = W - PAD.left - PAD.right;
+  const CH = H - PAD.top  - PAD.bottom;
+
+  const allY = models.flatMap(m => series[m].map(p=>p.y)).filter(v=>v!==null);
+  if (!allY.length) {
+    wrap.innerHTML = `<div class="empty">No ${metric} data for "${cat}" yet.</div>`;
+    legEl.innerHTML = ""; return;
+  }
+  const yMin = Math.min(...allY) * 0.9;
+  const yMax = Math.max(...allY) * 1.05 || 1;
+
+  const xScale = i => PAD.left + (runs.length > 1 ? (i / (runs.length-1)) * CW : CW/2);
+  const yScale = v => PAD.top  + CH - ((v - yMin)/(yMax - yMin))*CH;
+
+  // y-axis ticks
+  const nTicks = 5;
+  const ticks  = Array.from({length: nTicks+1}, (_,i) => yMin + (yMax-yMin)*i/nTicks);
+
+  let svg = `<svg class="trend-chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">`;
+
+  // grid lines
+  for (const t of ticks) {
+    const y = yScale(t);
+    svg += `<line x1="${PAD.left}" y1="${y}" x2="${W-PAD.right}" y2="${y}"
+      stroke="#262a36" stroke-width="1"/>`;
+    svg += `<text x="${PAD.left-6}" y="${y+4}" font-size="10" fill="#8b91a3" text-anchor="end">${
+      metric==='lat'?`${Math.round(t)}ms`: metric==='ok'?t.toFixed(1): Math.round(t)
+    }</text>`;
+  }
+
+  // x-axis labels (every N runs so they don't crowd)
+  const step = runs.length <= 20 ? 1 : runs.length <= 50 ? 5 : 10;
+  for (let i=0; i<runs.length; i++) {
+    if (i%step!==0 && i!==runs.length-1) continue;
+    const x = xScale(i);
+    svg += `<text x="${x}" y="${H-PAD.bottom+14}" font-size="9" fill="#8b91a3" text-anchor="middle">${runs[i].cycle}</text>`;
+  }
+  svg += `<text x="${W/2}" y="${H-2}" font-size="10" fill="#8b91a3" text-anchor="middle">cycle</text>`;
+
+  // tooltip targets (invisible wide rects per run column)
+  for (let i=0; i<runs.length; i++) {
+    const x = xScale(i);
+    const tooltipData = models.map(m => {
+      const p = series[m][i];
+      const raw = p && p.y !== null ? (metric==='lat'?`${p.y}ms`:metric==='ok'?(p.y?'ok':'error'):p.y) : '—';
+      return `<div class="tip-row" style="color:${modelColor(m)}">${m.split('/').pop().replace(':free','')}: ${raw}</div>`;
+    }).join('');
+    const tipHtml = `<div class="tip-head">Cycle ${runs[i].cycle}</div>${tooltipData}`;
+    const tx = x - 8; const tw = 16;
+    svg += `<rect x="${tx}" y="${PAD.top}" width="${tw}" height="${CH}"
+      fill="transparent" rx="2"
+      data-tip="${esc(tipHtml)}" data-x="${x}" data-y="${PAD.top + CH/2}"
+      class="tip-target"/>`;
+  }
+
+  // lines + dots per model
+  for (const m of models) {
+    if (hiddenModels.has(m)) continue;
+    const color = modelColor(m);
+    const pts   = series[m];
+
+    // polyline segments (skip nulls)
+    let d = "";
+    let inLine = false;
+    for (const p of pts) {
+      if (p.y === null) { inLine = false; continue; }
+      const cx = xScale(p.x), cy = yScale(p.y);
+      if (!inLine) { d += `M ${cx} ${cy} `; inLine = true; }
+      else          d += `L ${cx} ${cy} `;
+    }
+    if (d) svg += `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
+
+    // dots
+    for (const p of pts) {
+      if (p.y === null) continue;
+      svg += `<circle cx="${xScale(p.x)}" cy="${yScale(p.y)}" r="3" fill="${color}"/>`;
+    }
+  }
+
+  svg += `</svg>`;
+  wrap.innerHTML = svg;
+
+  // attach tooltip listeners
+  const tip = document.getElementById("tip");
+  wrap.querySelectorAll(".tip-target").forEach(el => {
+    el.addEventListener("mouseenter", ev => {
+      const rect = ev.target.getBoundingClientRect();
+      tip.innerHTML = el.dataset.tip;
+      tip.style.opacity = "1";
+      tip.style.left = (rect.left + 10) + "px";
+      tip.style.top  = Math.max(4, rect.top - 10) + "px";
+    });
+    el.addEventListener("mouseleave", () => { tip.style.opacity = "0"; });
+  });
+
+  // legend
+  legEl.innerHTML = models.map(m => {
+    const hidden = hiddenModels.has(m);
+    const label  = m.replace(/:free$/, "").split("/").pop();
+    return `<div class="legend-item${hidden?" hidden":""}" data-model="${esc(m)}" title="${esc(m)}">
+      <div class="legend-swatch" style="background:${modelColor(m)}"></div>${esc(label)}</div>`;
+  }).join("");
+  legEl.querySelectorAll(".legend-item").forEach(el => {
+    el.addEventListener("click", () => {
+      const m = el.dataset.model;
+      hiddenModels.has(m) ? hiddenModels.delete(m) : hiddenModels.add(m);
+      drawChart(activeCat);
+    });
+  });
 }
 
+// ── leaderboard ───────────────────────────────────────────────────────────────
 function renderLeaderboard() {
   const board = buildLeaderboard(activeCat);
-  const host = document.getElementById("leaderboard");
+  const host  = document.getElementById("leaderboard");
   if (!board.length) {
     host.innerHTML = `<div class="card"><div class="empty">No data for "${activeCat}" yet.</div></div>`;
     return;
@@ -139,8 +355,9 @@ function renderLeaderboard() {
       <th class="num">Runs</th>
     </tr></thead><tbody>`;
   for (const r of board) {
+    const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${modelColor(r.model)};margin-right:5px"></span>`;
     html += `<tr>
-      <td class="model">${r.model}</td>
+      <td class="model">${dot}${esc(r.model)}</td>
       <td class="num">${fmt(r.avgTokensOut)}</td>
       <td class="num">${r.avgLatencyMs ? (r.avgLatencyMs/1000).toFixed(1)+"s" : "—"}</td>
       <td class="num">${fmt(r.avgChars)}</td>
@@ -152,51 +369,68 @@ function renderLeaderboard() {
   host.innerHTML = html;
 }
 
+// ── latest run ────────────────────────────────────────────────────────────────
 function renderLatest() {
   const host = document.getElementById("latest");
-  const run = (DATA.runs || [])[0];
+  const run  = (DATA.runs||[])[0];
   if (!run) { host.innerHTML = ""; return; }
-  const rows = (run.results || []).filter(r => r.category === activeCat);
+  const rows = (run.results||[]).filter(r=>r.category===activeCat);
   if (!rows.length) { host.innerHTML = ""; return; }
-  const title = (run.prompts && run.prompts[activeCat]) || "";
+  const title = (run.prompts&&run.prompts[activeCat]) || "";
   let html = `<div class="card"><h2>Latest run — ${activeCat}</h2>
-    <div class="meta">${run.run_id} · cycle ${run.cycle}<br>Prompt: ${escapeHtml(title)}</div>
+    <div class="meta">${esc(run.run_id)} · cycle ${run.cycle}<br>Prompt: ${esc(title)}</div>
     <table><thead><tr>
       <th>Model</th><th>Status</th>
       <th class="num">Tokens in</th><th class="num">Tokens out</th>
-      <th class="num">Latency</th><th class="num">Length</th><th>Output</th>
+      <th class="num">Latency</th><th class="num">Chars</th><th>Output</th>
     </tr></thead><tbody>`;
   for (const r of rows) {
     const links = [];
-    if (r.response_file) links.push(`<a href="${r.response_file}" target="_blank">text</a>`);
-    if (r.image_file) links.push(`<a href="${r.image_file}" target="_blank">image</a>`);
+    if (r.response_file) links.push(`<a href="${esc(r.response_file)}" target="_blank">text</a>`);
+    if (r.image_file)    links.push(`<a href="${esc(r.image_file)}" target="_blank">image</a>`);
+    const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${modelColor(r.model_id)};margin-right:5px;flex-shrink:0"></span>`;
     html += `<tr>
-      <td class="model">${r.model_id}</td>
-      <td><span class="pill ${r.status === "ok" ? "ok" : "err"}">${r.status}</span></td>
+      <td class="model" style="display:flex;align-items:center">${dot}${esc(r.model_id)}</td>
+      <td><span class="pill ${r.status==="ok"?"ok":"err"}">${r.status}</span></td>
       <td class="num">${fmt(r.tokens_in)}</td>
       <td class="num">${fmt(r.tokens_out)}</td>
-      <td class="num">${r.latency_ms ? (r.latency_ms/1000).toFixed(1)+"s" : "—"}</td>
+      <td class="num">${r.latency_ms?(r.latency_ms/1000).toFixed(1)+"s":"—"}</td>
       <td class="num">${fmt(r.response_chars)}</td>
-      <td class="links">${links.join("") || (r.error ? `<span style="color:var(--muted)">${escapeHtml(r.error.slice(0,80))}</span>` : "—")}</td>
+      <td class="links">${links.join("")||(r.error?`<span style="color:var(--muted)">${esc((r.error||"").slice(0,80))}</span>`:"—")}</td>
     </tr>`;
   }
   html += `</tbody></table></div>`;
   host.innerHTML = html;
 }
 
-function escapeHtml(s) {
-  return (s || "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
+// ── tabs ──────────────────────────────────────────────────────────────────────
+function renderTabs() {
+  const el = document.getElementById("tabs");
+  el.innerHTML = "";
+  for (const c of CATEGORIES) {
+    const t = document.createElement("div");
+    t.className = "tab" + (c===activeCat?" active":"");
+    t.textContent = c;
+    t.onclick = () => { activeCat = c; render(); };
+    el.appendChild(t);
+  }
 }
 
+// ── full render ───────────────────────────────────────────────────────────────
 function render() {
   renderTabs();
+  drawChart(activeCat);
   renderLeaderboard();
   renderLatest();
-  const n = (DATA.runs || []).length;
-  const last = (DATA.runs || [])[0];
+  const n    = (DATA.runs||[]).length;
+  const last = (DATA.runs||[])[0];
   document.getElementById("status").textContent =
     n ? `${n} run(s) recorded · latest ${last.run_id}` : "No runs yet.";
 }
+
+// ── wire up controls ──────────────────────────────────────────────────────────
+document.getElementById("metric-sel").addEventListener("change", ()=>drawChart(activeCat));
+document.getElementById("window-sel").addEventListener("change", ()=>drawChart(activeCat));
 
 load();
 setInterval(load, 60000);

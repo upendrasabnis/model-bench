@@ -6,6 +6,7 @@
   "max_retries": 3,
   "retry_backoff_seconds": 5,
   "dashboard_history_runs": 500,
+  "trend_history_runs": 200,
 
   "generator_model": "openai/gpt-oss-120b:free",
   "generator_temperature": 0.9,
