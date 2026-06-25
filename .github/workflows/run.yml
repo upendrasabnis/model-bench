@@ -2,9 +2,16 @@ name: Benchmark Run
 
 on:
   schedule:
-    # Daily at midnight UTC — batch generator means 1 gen call + 16 models × 3 cats = 49 req/day.
-    # To change frequency see _models_note in config.json for the budget formula.
-    - cron: "0 0 * * *"
+    # One run per day, but the hour rotates across the week so we sample different
+    # times-of-day over time (model availability / load varies by hour).
+    # Budget: 1 batch-gen call + 16 models × 3 cats = 49 req/day ≤ 50 free-tier cap.
+    - cron: "0  2 * * 0"   # Sunday    02:00 UTC
+    - cron: "0  8 * * 1"   # Monday    08:00 UTC
+    - cron: "0 14 * * 2"   # Tuesday   14:00 UTC
+    - cron: "0 20 * * 3"   # Wednesday 20:00 UTC
+    - cron: "0  5 * * 4"   # Thursday  05:00 UTC
+    - cron: "0 11 * * 5"   # Friday    11:00 UTC
+    - cron: "0 17 * * 6"   # Saturday  17:00 UTC
   workflow_dispatch: {}
 
 permissions:
