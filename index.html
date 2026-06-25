@@ -86,6 +86,9 @@
         <option value="lat">Latency (ms)</option>
         <option value="chars">Response chars</option>
         <option value="ok">Success (1=ok, 0=error)</option>
+        <option value="pct_tout">% change — tokens out</option>
+        <option value="pct_lat">% change — latency (lower=better)</option>
+        <option value="pct_chars">% change — response chars</option>
       </select>
       <label style="margin-left:12px">Show last</label>
       <select id="window-sel">
@@ -180,7 +183,11 @@ function buildLeaderboard(cat) {
   })).sort((a,b)=>(b.avgTokensOut||0)-(a.avgTokensOut||0));
 }
 
-// ── trend chart ───────────────────────────────────────────────────────────────
+// ── trend helpers ─────────────────────────────────────────────────────────────
+const PCT_METRICS = { pct_tout: "tout", pct_lat: "lat", pct_chars: "chars" };
+// For latency, lower = better, so improvement is negative raw delta → flip sign.
+const LAT_LOWER_BETTER = { lat: true, pct_lat: true };
+
 function trendRunsForCat(cat) {
   const windowVal = document.getElementById("window-sel").value;
   let runs = (TREND.runs||[]).filter(r => r.points && r.points.some(p=>p.cat===cat));
@@ -188,12 +195,80 @@ function trendRunsForCat(cat) {
   return runs;
 }
 
+// % change from each model's first non-null value in the window (baseline = 0%).
+// For latency: lower is better → flip sign so "improving" means positive %.
+function toPctSeries(rawSeries, metric) {
+  const out = {};
+  for (const [m, pts] of Object.entries(rawSeries)) {
+    const first = pts.find(p => p.y !== null);
+    const base  = first ? first.y : null;
+    out[m] = pts.map(p => {
+      if (p.y === null || base === null || base === 0) return { ...p, y: null, raw: null };
+      let pct = (p.y - base) / base * 100;
+      if (LAT_LOWER_BETTER[metric]) pct = -pct; // flip: faster = positive
+      return { ...p, raw: p.y, y: Math.round(pct * 10) / 10 };
+    });
+  }
+  return out;
+}
+
+// Trend % for one model in the leaderboard: compare avg of first vs last N runs.
+function trendPct(model, cat, rawMetric, n = 3) {
+  const runs = (TREND.runs||[]).filter(r => r.points && r.points.some(p=>p.cat===cat && p.model===model));
+  if (runs.length < 2) return null;
+  const slice = k => runs.slice(k).map(r => {
+    const p = (r.points||[]).find(p2=>p2.cat===cat && p2.model===model);
+    return p && p[rawMetric] != null ? p[rawMetric] : null;
+  }).filter(v=>v!==null);
+  const earlyVals = slice(0).slice(0, n);
+  const lateVals  = slice(-n);
+  if (!earlyVals.length || !lateVals.length) return null;
+  const base = earlyVals.reduce((a,b)=>a+b,0)/earlyVals.length;
+  const curr = lateVals.reduce((a,b)=>a+b,0)/lateVals.length;
+  if (base === 0) return null;
+  let pct = (curr - base) / base * 100;
+  if (LAT_LOWER_BETTER[rawMetric]) pct = -pct;
+  return Math.round(pct * 10) / 10;
+}
+
+function fmtPct(pct, suffix = "") {
+  if (pct === null) return `<span style="color:var(--muted)">—</span>`;
+  const sign = pct >= 0 ? "+" : "";
+  const color = pct >= 0 ? "var(--ok)" : "var(--err)";
+  const arrow = pct >= 0 ? "↑" : "↓";
+  return `<span style="color:${color};font-size:12px">${arrow}${sign}${pct}%${suffix}</span>`;
+}
+
+function fmtTick(val, metric) {
+  if (metric === "lat") return `${Math.round(val)}ms`;
+  if (metric === "ok")  return val.toFixed(1);
+  if (metric.startsWith("pct_")) return `${val > 0 ? "+" : ""}${val}%`;
+  return Math.round(val);
+}
+
+function fmtTipVal(p, metric, isPct) {
+  if (!p || p.y === null) return "—";
+  if (isPct) {
+    const sign = p.y >= 0 ? "+" : "";
+    const arrow = p.y >= 0 ? "↑" : "↓";
+    const rawPart = p.raw != null ? ` (${metric==="pct_lat"?`${p.raw}ms`:p.raw})` : "";
+    return `${arrow}${sign}${p.y}%${rawPart}`;
+  }
+  if (metric === "lat") return `${p.y}ms`;
+  if (metric === "ok")  return p.y ? "ok" : "error";
+  return p.y;
+}
+
+// ── trend chart ───────────────────────────────────────────────────────────────
 function drawChart(cat) {
-  const metric  = document.getElementById("metric-sel").value;
-  const runs    = trendRunsForCat(cat);
-  const wrap    = document.getElementById("chart-wrap");
-  const legEl   = document.getElementById("chart-legend");
-  const metaEl  = document.getElementById("trend-meta");
+  const metricRaw = document.getElementById("metric-sel").value;
+  const isPct     = metricRaw in PCT_METRICS;
+  const rawMetric = isPct ? PCT_METRICS[metricRaw] : metricRaw;
+
+  const runs   = trendRunsForCat(cat);
+  const wrap   = document.getElementById("chart-wrap");
+  const legEl  = document.getElementById("chart-legend");
+  const metaEl = document.getElementById("trend-meta");
 
   if (!runs.length) {
     wrap.innerHTML = `<div class="empty">No trend data for "${cat}" yet.</div>`;
@@ -205,101 +280,101 @@ function drawChart(cat) {
     `${runs.length} run(s) · cycle ${runs[0].cycle}–${runs[runs.length-1].cycle} · `+
     `${new Date(runs[0].ts).toLocaleString()} → ${new Date(runs[runs.length-1].ts).toLocaleString()}`;
 
-  // gather all models that appear in these runs for this category
+  // gather models
   const modelsSet = new Set();
-  for (const r of runs)
-    for (const p of r.points||[])
-      if (p.cat === cat) modelsSet.add(p.model);
+  for (const r of runs) for (const p of r.points||[]) if (p.cat===cat) modelsSet.add(p.model);
   const models = [...modelsSet];
 
-  // build series: model → array of {x: runIndex, y: value|null}
-  const series = {};
+  // raw series
+  let series = {};
   for (const m of models) {
     series[m] = runs.map((r, xi) => {
       const p = (r.points||[]).find(p2=>p2.cat===cat && p2.model===m);
-      return { x: xi, y: (p && p[metric] !== undefined && p[metric] !== null) ? p[metric] : null };
+      return { x: xi, y: (p && p[rawMetric] != null) ? p[rawMetric] : null, raw: null };
     });
   }
+  if (isPct) series = toPctSeries(series, metricRaw);
 
   // SVG geometry
   const W = Math.max(600, runs.length * 18);
   const H = 260;
-  const PAD = { top:20, right:20, bottom:36, left:62 };
+  const PAD = { top: 20, right: 20, bottom: 36, left: 68 };
   const CW = W - PAD.left - PAD.right;
   const CH = H - PAD.top  - PAD.bottom;
 
-  const allY = models.flatMap(m => series[m].map(p=>p.y)).filter(v=>v!==null);
+  const allY = models.flatMap(m => series[m].map(p=>p.y)).filter(v=>v!=null);
   if (!allY.length) {
-    wrap.innerHTML = `<div class="empty">No ${metric} data for "${cat}" yet.</div>`;
+    wrap.innerHTML = `<div class="empty">No data for "${metricRaw}" in "${cat}" yet.</div>`;
     legEl.innerHTML = ""; return;
   }
-  const yMin = Math.min(...allY) * 0.9;
-  const yMax = Math.max(...allY) * 1.05 || 1;
 
-  const xScale = i => PAD.left + (runs.length > 1 ? (i / (runs.length-1)) * CW : CW/2);
-  const yScale = v => PAD.top  + CH - ((v - yMin)/(yMax - yMin))*CH;
+  let yMin = Math.min(...allY), yMax = Math.max(...allY);
+  if (isPct) {
+    // include 0 baseline in view; add padding
+    yMin = Math.min(yMin, 0) * 1.1 - 1;
+    yMax = Math.max(yMax, 0) * 1.1 + 1;
+  } else {
+    yMin = yMin * 0.9; yMax = yMax * 1.05 || 1;
+  }
 
-  // y-axis ticks
+  const xScale = i => PAD.left + (runs.length > 1 ? (i/(runs.length-1))*CW : CW/2);
+  const yScale = v => PAD.top + CH - ((v - yMin)/(yMax - yMin))*CH;
+
   const nTicks = 5;
   const ticks  = Array.from({length: nTicks+1}, (_,i) => yMin + (yMax-yMin)*i/nTicks);
 
   let svg = `<svg class="trend-chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">`;
 
-  // grid lines
-  for (const t of ticks) {
-    const y = yScale(t);
-    svg += `<line x1="${PAD.left}" y1="${y}" x2="${W-PAD.right}" y2="${y}"
-      stroke="#262a36" stroke-width="1"/>`;
-    svg += `<text x="${PAD.left-6}" y="${y+4}" font-size="10" fill="#8b91a3" text-anchor="end">${
-      metric==='lat'?`${Math.round(t)}ms`: metric==='ok'?t.toFixed(1): Math.round(t)
-    }</text>`;
+  // zero line for pct charts
+  if (isPct) {
+    const zy = yScale(0);
+    svg += `<line x1="${PAD.left}" y1="${zy}" x2="${W-PAD.right}" y2="${zy}" stroke="#3fb95066" stroke-width="1.5" stroke-dasharray="4,3"/>`;
+    svg += `<text x="${PAD.left-6}" y="${zy+4}" font-size="10" fill="#3fb950" text-anchor="end">0%</text>`;
   }
 
-  // x-axis labels (every N runs so they don't crowd)
+  // grid lines + y labels
+  for (const t of ticks) {
+    const y = yScale(t);
+    svg += `<line x1="${PAD.left}" y1="${y}" x2="${W-PAD.right}" y2="${y}" stroke="#262a36" stroke-width="1"/>`;
+    svg += `<text x="${PAD.left-6}" y="${y+4}" font-size="10" fill="#8b91a3" text-anchor="end">${fmtTick(t, metricRaw)}</text>`;
+  }
+
+  // x-axis labels
   const step = runs.length <= 20 ? 1 : runs.length <= 50 ? 5 : 10;
   for (let i=0; i<runs.length; i++) {
     if (i%step!==0 && i!==runs.length-1) continue;
-    const x = xScale(i);
-    svg += `<text x="${x}" y="${H-PAD.bottom+14}" font-size="9" fill="#8b91a3" text-anchor="middle">${runs[i].cycle}</text>`;
+    svg += `<text x="${xScale(i)}" y="${H-PAD.bottom+14}" font-size="9" fill="#8b91a3" text-anchor="middle">${runs[i].cycle}</text>`;
   }
   svg += `<text x="${W/2}" y="${H-2}" font-size="10" fill="#8b91a3" text-anchor="middle">cycle</text>`;
 
-  // tooltip targets (invisible wide rects per run column)
+  // tooltip hover rects
   for (let i=0; i<runs.length; i++) {
     const x = xScale(i);
     const tooltipData = models.map(m => {
       const p = series[m][i];
-      const raw = p && p.y !== null ? (metric==='lat'?`${p.y}ms`:metric==='ok'?(p.y?'ok':'error'):p.y) : '—';
-      return `<div class="tip-row" style="color:${modelColor(m)}">${m.split('/').pop().replace(':free','')}: ${raw}</div>`;
+      return `<div class="tip-row" style="color:${modelColor(m)}">${m.split('/').pop().replace(':free','')}: ${fmtTipVal(p, metricRaw, isPct)}</div>`;
     }).join('');
-    const tipHtml = `<div class="tip-head">Cycle ${runs[i].cycle}</div>${tooltipData}`;
-    const tx = x - 8; const tw = 16;
-    svg += `<rect x="${tx}" y="${PAD.top}" width="${tw}" height="${CH}"
+    svg += `<rect x="${x-8}" y="${PAD.top}" width="16" height="${CH}"
       fill="transparent" rx="2"
-      data-tip="${esc(tipHtml)}" data-x="${x}" data-y="${PAD.top + CH/2}"
+      data-tip="${esc(`<div class='tip-head'>Cycle ${runs[i].cycle}</div>${tooltipData}`)}"
       class="tip-target"/>`;
   }
 
-  // lines + dots per model
+  // lines + dots
   for (const m of models) {
     if (hiddenModels.has(m)) continue;
     const color = modelColor(m);
     const pts   = series[m];
-
-    // polyline segments (skip nulls)
-    let d = "";
-    let inLine = false;
+    let d = "", inLine = false;
     for (const p of pts) {
-      if (p.y === null) { inLine = false; continue; }
+      if (p.y == null) { inLine = false; continue; }
       const cx = xScale(p.x), cy = yScale(p.y);
-      if (!inLine) { d += `M ${cx} ${cy} `; inLine = true; }
-      else          d += `L ${cx} ${cy} `;
+      d += inLine ? `L ${cx} ${cy} ` : `M ${cx} ${cy} `;
+      inLine = true;
     }
     if (d) svg += `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
-
-    // dots
     for (const p of pts) {
-      if (p.y === null) continue;
+      if (p.y == null) continue;
       svg += `<circle cx="${xScale(p.x)}" cy="${yScale(p.y)}" r="3" fill="${color}"/>`;
     }
   }
@@ -307,14 +382,14 @@ function drawChart(cat) {
   svg += `</svg>`;
   wrap.innerHTML = svg;
 
-  // attach tooltip listeners
+  // tooltip listeners
   const tip = document.getElementById("tip");
   wrap.querySelectorAll(".tip-target").forEach(el => {
     el.addEventListener("mouseenter", ev => {
       const rect = ev.target.getBoundingClientRect();
       tip.innerHTML = el.dataset.tip;
       tip.style.opacity = "1";
-      tip.style.left = (rect.left + 10) + "px";
+      tip.style.left = (rect.right + 6) + "px";
       tip.style.top  = Math.max(4, rect.top - 10) + "px";
     });
     el.addEventListener("mouseleave", () => { tip.style.opacity = "0"; });
@@ -344,18 +419,26 @@ function renderLeaderboard() {
     host.innerHTML = `<div class="card"><div class="empty">No data for "${activeCat}" yet.</div></div>`;
     return;
   }
+  const trendRuns = (TREND.runs||[]).filter(r => r.points && r.points.some(p=>p.cat===activeCat));
+  const hasTrend  = trendRuns.length >= 2;
+
   let html = `<div class="card"><h2>Leaderboard — ${activeCat}</h2>
-    <div class="meta">Averaged across all recorded runs (${board.reduce((a,b)=>a+b.runs,0)} calls)</div>
+    <div class="meta">Averaged across all recorded runs (${board.reduce((a,b)=>a+b.runs,0)} calls)${
+      hasTrend ? ` · trend = first 3 vs last 3 runs` : ""}</div>
     <table><thead><tr>
       <th>Model</th>
       <th class="num">Avg tokens out</th>
       <th class="num">Avg latency</th>
-      <th class="num">Avg length</th>
+      <th class="num">Avg chars</th>
       <th class="num">Success</th>
       <th class="num">Runs</th>
+      ${hasTrend ? `<th class="num" title="% change in tokens-out, first 3 → last 3 runs. ↑ green = more output. Latency shown separately.">Tokens trend</th><th class="num" title="% change in latency, first 3 → last 3. ↑ green = faster.">Latency trend</th>` : ""}
     </tr></thead><tbody>`;
+
   for (const r of board) {
     const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${modelColor(r.model)};margin-right:5px"></span>`;
+    const toutPct = hasTrend ? trendPct(r.model, activeCat, "tout") : null;
+    const latPct  = hasTrend ? trendPct(r.model, activeCat, "lat")  : null;
     html += `<tr>
       <td class="model">${dot}${esc(r.model)}</td>
       <td class="num">${fmt(r.avgTokensOut)}</td>
@@ -363,6 +446,7 @@ function renderLeaderboard() {
       <td class="num">${fmt(r.avgChars)}</td>
       <td class="num">${r.success}%</td>
       <td class="num">${r.runs}</td>
+      ${hasTrend ? `<td class="num">${fmtPct(toutPct)}</td><td class="num">${fmtPct(latPct)}</td>` : ""}
     </tr>`;
   }
   html += `</tbody></table></div>`;

@@ -2,10 +2,9 @@ name: Benchmark Run
 
 on:
   schedule:
-    # Twice daily (midnight + noon UTC) — keeps within OpenRouter free tier of 50 req/day.
-    # Current config: 3 gen calls + 7 models × 3 cats = 24 req/run × 2 = 48 req/day.
-    # To change frequency, adjust cron AND models list in config.json to stay under 50/day.
-    - cron: "0 0,12 * * *"
+    # Daily at midnight UTC — batch generator means 1 gen call + 16 models × 3 cats = 49 req/day.
+    # To change frequency see _models_note in config.json for the budget formula.
+    - cron: "0 0 * * *"
   workflow_dispatch: {}
 
 permissions:

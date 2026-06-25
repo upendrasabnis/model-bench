@@ -20,15 +20,24 @@
     "temperature": 0.7
   },
 
-  "_models_note": "Keep model count × enabled categories + categories (gen calls) × runs_per_day ≤ 50. Currently: (7×3 + 3) × 2 runs = 48/day.",
+  "_models_note": "Budget: (models × enabled_cats + 1 batch_gen_call) × runs_per_day ≤ 50. Currently: (16×3 + 1) × 1 = 49/day.",
   "models": [
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "qwen/qwen3-coder:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "nousresearch/hermes-3-llama-3.1-405b:free",
     "openai/gpt-oss-120b:free",
     "nvidia/nemotron-3-super-120b-a12b:free",
-    "google/gemma-4-31b-it:free",
     "qwen/qwen3-next-80b-a3b-instruct:free",
-    "cohere/north-mini-code:free"
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "qwen/qwen3-coder:free",
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "poolside/laguna-m.1:free",
+    "nvidia/nemotron-3-nano-30b-a3b:free",
+    "cohere/north-mini-code:free",
+    "openai/gpt-oss-20b:free",
+    "poolside/laguna-xs.2:free",
+    "nvidia/nemotron-nano-12b-v2-vl:free",
+    "nvidia/nemotron-nano-9b-v2:free"
   ],
 
   "categories": {

@@ -198,23 +198,32 @@ def rotate(items, cycle):
     return items[cycle % len(items)] if items else None
 
 
-def generate_prompt(api_key, config, category, meta_prompt, history, cycle):
-    """Ask the generator model for a fresh prompt; raises on failure."""
-    recent = history.get(category, [])[-config.get("prompt_history_keep", 20):]
-    avoid = ""
-    if recent:
-        joined = "\n".join(f"- {p[:300]}" for p in recent)
-        avoid = ("\n\nDo NOT repeat or closely resemble any of these recently used "
-                 f"prompts:\n{joined}")
+def generate_prompts_batch(api_key, config, categories, generators, history, cycle):
+    """
+    Generate ALL category prompts in ONE API call (saves N-1 requests vs per-category).
+    Returns {category: prompt_text}. Raises on failure.
+    """
+    parts = []
+    for cat in categories:
+        meta = generators.get(cat, "")
+        recent = history.get(cat, [])[-config.get("prompt_history_keep", 20):]
+        avoid = ""
+        if recent:
+            joined = "\n".join(f"    - {p[:200]}" for p in recent)
+            avoid = f"\n  Recently used (do NOT repeat or closely resemble):\n{joined}"
+        parts.append(f'  "{cat}": {meta}{avoid}')
+
     instruction = (
-        f"{meta_prompt}\n\n(Variation seed: cycle {cycle}.)"
-        f"{avoid}\n\nRemember: output ONLY the prompt/text itself, with no preamble."
+        f"Generate exactly one benchmark prompt for EACH of the following {len(categories)} categories. "
+        f"Return ONLY a valid JSON object with the category name as the key and the complete prompt text as the value. "
+        f"No markdown, no code fences, no text before or after the JSON. Variation seed: cycle {cycle}.\n\n"
+        "Categories:\n" + "\n\n".join(parts)
     )
     result = call_model(
         api_key,
         config["generator_model"],
         instruction,
-        max_tokens=2000,
+        max_tokens=3000,
         temperature=config.get("generator_temperature", 0.9),
         timeout=config["request_timeout_seconds"],
         max_retries=config["max_retries"],
@@ -222,13 +231,27 @@ def generate_prompt(api_key, config, category, meta_prompt, history, cycle):
     )
     if result["status"] != "ok" or not result["text"].strip():
         raise RuntimeError(result.get("error") or "empty generation")
-    return result["text"].strip()
+
+    text = result["text"].strip()
+    # Strip markdown code fences if the model added them
+    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.MULTILINE)
+    text = re.sub(r"\s*```$", "", text, flags=re.MULTILINE)
+    # Find the JSON object
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if not m:
+        raise RuntimeError(f"no JSON object in generator response: {text[:300]}")
+    parsed = json.loads(m.group())
+    missing = [c for c in categories if c not in parsed or not str(parsed[c]).strip()]
+    if missing:
+        raise RuntimeError(f"missing categories in batch response: {missing}")
+    return {c: str(parsed[c]).strip() for c in categories}
 
 
-def resolve_prompt(api_key, config, category, generators, manual, fallback, history, cycle):
+def resolve_prompt_single(api_key, config, category, generators, manual, fallback, history, cycle):
     """
-    Returns (raw_prompt, source_used). raw_prompt is the category content
-    (for email/image this is the generated email/feature text, not yet wrapped).
+    Single-category fallback used when batch generation is disabled or per-category
+    prompt_source is 'manual' or 'fallback'.
+    Returns (raw_prompt, source_used).
     """
     source = cat_setting(config, category, "prompt_source", "generate")
 
@@ -246,16 +269,27 @@ def resolve_prompt(api_key, config, category, generators, manual, fallback, hist
             raise RuntimeError(f"no fallback prompt for '{category}' in fallback.json")
         return entry, "fallback"
 
-    # generate
-    try:
-        return generate_prompt(api_key, config, category, generators[category], history, cycle), "generate"
-    except Exception as e:  # noqa: BLE001
-        if config.get("generator_fallback_on_error", True):
-            log(f"  ! generation failed for {category} ({e}); using fallback")
-            entry = rotate(fallback.get(category, []), cycle)
-            if entry:
-                return entry, "fallback"
-        raise
+    # generate (single-category path — only used when batch is off for this cat)
+    recent = history.get(category, [])[-config.get("prompt_history_keep", 20):]
+    avoid = ""
+    if recent:
+        joined = "\n".join(f"- {p[:300]}" for p in recent)
+        avoid = f"\n\nDo NOT repeat or closely resemble any of these:\n{joined}"
+    instruction = (
+        f"{generators.get(category,'')}\n\n(Variation seed: cycle {cycle}.)"
+        f"{avoid}\n\nOutput ONLY the prompt text, no preamble."
+    )
+    result = call_model(
+        api_key, config["generator_model"], instruction,
+        max_tokens=2000,
+        temperature=config.get("generator_temperature", 0.9),
+        timeout=config["request_timeout_seconds"],
+        max_retries=config["max_retries"],
+        backoff=config["retry_backoff_seconds"],
+    )
+    if result["status"] != "ok" or not result["text"].strip():
+        raise RuntimeError(result.get("error") or "empty generation")
+    return result["text"].strip(), "generate"
 
 
 def wrap_for_models(category, raw_prompt):
@@ -384,22 +418,51 @@ def main():
     log(f"Enabled categories: {enabled}")
 
     # 1) Resolve one prompt per enabled category.
+    # Separate "generate" categories (batch into 1 API call) from manual/fallback (no call).
     prompts = {}  # category -> {raw, wrapped, source, title}
-    for category in enabled:
+    gen_cats = [c for c in enabled
+                if cat_setting(config, c, "prompt_source", "generate") == "generate"]
+    other_cats = [c for c in enabled if c not in gen_cats]
+
+    # --- Batch generate all "generate" categories in one call ---
+    if gen_cats:
         try:
-            raw, source = resolve_prompt(
-                api_key, config, category, generators, manual, fallback, history, cycle)
+            batch = generate_prompts_batch(api_key, config, gen_cats, generators, history, cycle)
+            for category, raw in batch.items():
+                max_in = cat_setting(config, category, "max_input_chars", 8000)
+                raw = raw[:max_in]
+                prompts[category] = {"raw": raw, "source": "generate"}
+            log(f"  [batch] generated prompts for: {list(batch.keys())}")
         except Exception as e:  # noqa: BLE001
-            log(f"  ! skipping {category}: could not obtain prompt ({e})")
-            continue
-        max_in = cat_setting(config, category, "max_input_chars", 8000)
-        raw = raw[:max_in]
-        wrapped = wrap_for_models(category, raw)
-        title = re.sub(r"\s+", " ", raw).strip()[:80]
-        prompts[category] = {"raw": raw, "wrapped": wrapped, "source": source, "title": title}
-        history.setdefault(category, []).append(raw)
+            if config.get("generator_fallback_on_error", True):
+                log(f"  ! batch generation failed ({e}); falling back per-category")
+                for category in gen_cats:
+                    entry = rotate(fallback.get(category, []), cycle)
+                    if entry:
+                        prompts[category] = {"raw": entry, "source": "fallback"}
+                    else:
+                        log(f"  ! no fallback for {category}, skipping")
+            else:
+                log(f"  ! batch generation failed ({e}); skipping {gen_cats}")
+
+    # --- Manual / fallback categories (no API call) ---
+    for category in other_cats:
+        try:
+            raw, source = resolve_prompt_single(
+                api_key, config, category, generators, manual, fallback, history, cycle)
+            prompts[category] = {"raw": raw, "source": source}
+        except Exception as e:  # noqa: BLE001
+            log(f"  ! skipping {category}: {e}")
+
+    # --- Finalise prompts (wrap + title + history update) ---
+    for category in list(prompts.keys()):
+        p = prompts[category]
+        wrapped = wrap_for_models(category, p["raw"])
+        title = re.sub(r"\s+", " ", p["raw"]).strip()[:80]
+        prompts[category] = {**p, "wrapped": wrapped, "title": title}
+        history.setdefault(category, []).append(p["raw"])
         history[category] = history[category][-config.get("prompt_history_keep", 20):]
-        log(f"  [{category}] prompt via {source}: {title}")
+        log(f"  [{category}] prompt via {p['source']}: {title}")
 
     # 2) Build the work list: (category, model) -> one request.
     tasks = []
