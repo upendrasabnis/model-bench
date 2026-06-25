@@ -83,12 +83,28 @@ and make sure your OpenRouter account has credits.
 
 ## Run locally
 
+macOS (Homebrew Python) blocks system-wide `pip install` (PEP 668 "externally-managed-environment").
+Use a virtual environment — this is the clean, recommended way:
+
 ```bash
+cd ~/model-bench
+python3 -m venv .venv
+source .venv/bin/activate          # activates the venv (prompt shows (.venv))
 pip install -r requirements.txt
 export OPENROUTER_API_KEY=sk-or-...
 python scripts/run_benchmark.py
-python3 -m http.server 8000   # then open http://localhost:8000 for the dashboard
+python3 -m http.server 8000        # then open http://localhost:8000 for the dashboard
+deactivate                         # when done
 ```
+
+Next time, you only need `source .venv/bin/activate` again (the `.venv/` folder is git-ignored).
+
+Quick-and-dirty alternative (not recommended — can affect your Homebrew Python):
+`pip install --user --break-system-packages -r requirements.txt`
+
+> Note: running locally will also advance `state.json`/`prompt_history.json` and write
+> `results.*`. If you don't want a local test run mixed into the real history, just don't
+> commit those files (or run it in a throwaway copy).
 
 ---
 
