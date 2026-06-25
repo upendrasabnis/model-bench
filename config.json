@@ -20,6 +20,7 @@
     "temperature": 0.7
   },
 
+  "_models_note": "Keep model count × enabled categories + categories (gen calls) × runs_per_day ≤ 50. Currently: (7×3 + 3) × 2 runs = 48/day.",
   "models": [
     "meta-llama/llama-3.3-70b-instruct:free",
     "qwen/qwen3-coder:free",
@@ -27,8 +28,7 @@
     "nvidia/nemotron-3-super-120b-a12b:free",
     "google/gemma-4-31b-it:free",
     "qwen/qwen3-next-80b-a3b-instruct:free",
-    "cohere/north-mini-code:free",
-    "nousresearch/hermes-3-llama-3.1-405b:free"
+    "cohere/north-mini-code:free"
   ],
 
   "categories": {

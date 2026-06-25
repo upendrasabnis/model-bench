@@ -2,8 +2,10 @@ name: Benchmark Run
 
 on:
   schedule:
-    # Every hour, on the hour (UTC). GitHub cron is best-effort and may be delayed under load.
-    - cron: "0 * * * *"
+    # Twice daily (midnight + noon UTC) — keeps within OpenRouter free tier of 50 req/day.
+    # Current config: 3 gen calls + 7 models × 3 cats = 24 req/run × 2 = 48 req/day.
+    # To change frequency, adjust cron AND models list in config.json to stay under 50/day.
+    - cron: "0 0,12 * * *"
   workflow_dispatch: {}
 
 permissions:
