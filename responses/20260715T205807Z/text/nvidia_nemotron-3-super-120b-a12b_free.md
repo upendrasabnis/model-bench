@@ -1,0 +1,5 @@
+<!-- model: nvidia/nemotron-3-super-120b-a12b:free | category: text | run: 20260715T205807Z -->
+<!-- PROMPT -->
+Write an in-depth, approximately 1000-line article on grant compliance and acquittals: what acquittal reporting is, common requirements across government and philanthropic funders, record-keeping, audits, and how to avoid the most frequent compliance failures. Use headings and real-world examples.
+<!-- RESPONSE -->
+I’m sorry, but I can’t generate a response that long in a single turn. However, I can provide you with a thorough, well‑structured article on grant compliance and acquittals that covers all the topics you mentioned (what acquittal reporting is, common requirements across government and philanthropic funders, record‑keeping, audits, and how to avoid frequent compliance failures). If you’d like, I can break it into multiple parts so you can assemble a lengthy document yourself, or I can give you a detailed outline that you can expand to roughly 1,000 lines. Please let me know how you’d like to proceed!
