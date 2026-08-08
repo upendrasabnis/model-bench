@@ -17409,6 +17409,397 @@
           "chars": 25026
         }
       ]
+    },
+    {
+      "run_id": "20260808T173453Z",
+      "ts": "2026-08-08T17:34:53.595524+00:00",
+      "cycle": 46,
+      "points": [
+        {
+          "cat": "code",
+          "model": "openai/gpt-oss-120b:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 143,
+          "chars": null
+        },
+        {
+          "cat": "code",
+          "model": "qwen/qwen3-coder:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 140,
+          "chars": null
+        },
+        {
+          "cat": "code",
+          "model": "poolside/laguna-m.1:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 146,
+          "chars": null
+        },
+        {
+          "cat": "code",
+          "model": "meta-llama/llama-3.3-70b-instruct:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 167,
+          "chars": null
+        },
+        {
+          "cat": "code",
+          "model": "nousresearch/hermes-3-llama-3.1-405b:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 189,
+          "chars": null
+        },
+        {
+          "cat": "code",
+          "model": "qwen/qwen3-next-80b-a3b-instruct:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 193,
+          "chars": null
+        },
+        {
+          "cat": "code",
+          "model": "poolside/laguna-xs.2:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 78,
+          "chars": null
+        },
+        {
+          "cat": "text",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+          "ok": 1,
+          "tout": null,
+          "lat": 421,
+          "chars": null
+        },
+        {
+          "cat": "text",
+          "model": "nousresearch/hermes-3-llama-3.1-405b:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 465,
+          "chars": null
+        },
+        {
+          "cat": "text",
+          "model": "openai/gpt-oss-120b:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 60,
+          "chars": null
+        },
+        {
+          "cat": "code",
+          "model": "google/gemma-4-31b-it:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 151,
+          "chars": null
+        },
+        {
+          "cat": "text",
+          "model": "qwen/qwen3-next-80b-a3b-instruct:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 48,
+          "chars": null
+        },
+        {
+          "cat": "text",
+          "model": "meta-llama/llama-3.3-70b-instruct:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 59,
+          "chars": null
+        },
+        {
+          "cat": "text",
+          "model": "qwen/qwen3-coder:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 61,
+          "chars": null
+        },
+        {
+          "cat": "text",
+          "model": "google/gemma-4-31b-it:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 131,
+          "chars": null
+        },
+        {
+          "cat": "code",
+          "model": "nvidia/nemotron-3-nano-30b-a3b:free",
+          "ok": 1,
+          "tout": 4321,
+          "lat": 44707,
+          "chars": 16003
+        },
+        {
+          "cat": "text",
+          "model": "poolside/laguna-m.1:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 62,
+          "chars": null
+        },
+        {
+          "cat": "code",
+          "model": "nvidia/nemotron-nano-12b-v2-vl:free",
+          "ok": 1,
+          "tout": 2062,
+          "lat": 45922,
+          "chars": 9358
+        },
+        {
+          "cat": "code",
+          "model": "cohere/north-mini-code:free",
+          "ok": 1,
+          "tout": 1877,
+          "lat": 46258,
+          "chars": null
+        },
+        {
+          "cat": "text",
+          "model": "google/gemma-4-26b-a4b-it:free",
+          "ok": 1,
+          "tout": 2181,
+          "lat": 45061,
+          "chars": 10242
+        },
+        {
+          "cat": "text",
+          "model": "poolside/laguna-xs.2:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 75,
+          "chars": null
+        },
+        {
+          "cat": "code",
+          "model": "google/gemma-4-26b-a4b-it:free",
+          "ok": 1,
+          "tout": 2053,
+          "lat": 109841,
+          "chars": 7821
+        },
+        {
+          "cat": "text",
+          "model": "nvidia/nemotron-3-nano-30b-a3b:free",
+          "ok": 1,
+          "tout": 8000,
+          "lat": 94997,
+          "chars": 23765
+        },
+        {
+          "cat": "email",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+          "ok": 1,
+          "tout": 725,
+          "lat": 16355,
+          "chars": 2702
+        },
+        {
+          "cat": "email",
+          "model": "nousresearch/hermes-3-llama-3.1-405b:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 65,
+          "chars": null
+        },
+        {
+          "cat": "email",
+          "model": "openai/gpt-oss-120b:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 63,
+          "chars": null
+        },
+        {
+          "cat": "code",
+          "model": "openai/gpt-oss-20b:free",
+          "ok": 1,
+          "tout": 5651,
+          "lat": 178109,
+          "chars": 13440
+        },
+        {
+          "cat": "email",
+          "model": "qwen/qwen3-next-80b-a3b-instruct:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 59,
+          "chars": null
+        },
+        {
+          "cat": "email",
+          "model": "meta-llama/llama-3.3-70b-instruct:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 64,
+          "chars": null
+        },
+        {
+          "cat": "email",
+          "model": "qwen/qwen3-coder:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 54,
+          "chars": null
+        },
+        {
+          "cat": "code",
+          "model": "nvidia/nemotron-nano-9b-v2:free",
+          "ok": 1,
+          "tout": 6000,
+          "lat": 180179,
+          "chars": 5199
+        },
+        {
+          "cat": "text",
+          "model": "nvidia/nemotron-3-super-120b-a12b:free",
+          "ok": 1,
+          "tout": 5921,
+          "lat": 182530,
+          "chars": 25569
+        },
+        {
+          "cat": "email",
+          "model": "poolside/laguna-m.1:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 72,
+          "chars": null
+        },
+        {
+          "cat": "email",
+          "model": "nvidia/nemotron-3-nano-30b-a3b:free",
+          "ok": 1,
+          "tout": 706,
+          "lat": 7640,
+          "chars": 2871
+        },
+        {
+          "cat": "email",
+          "model": "google/gemma-4-31b-it:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 134,
+          "chars": null
+        },
+        {
+          "cat": "text",
+          "model": "nvidia/nemotron-nano-12b-v2-vl:free",
+          "ok": 1,
+          "tout": null,
+          "lat": 120156,
+          "chars": null
+        },
+        {
+          "cat": "email",
+          "model": "poolside/laguna-xs.2:free",
+          "ok": 0,
+          "tout": null,
+          "lat": 61,
+          "chars": null
+        },
+        {
+          "cat": "code",
+          "model": "nvidia/nemotron-3-super-120b-a12b:free",
+          "ok": 1,
+          "tout": 5172,
+          "lat": 201529,
+          "chars": 19959
+        },
+        {
+          "cat": "code",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+          "ok": 1,
+          "tout": 3849,
+          "lat": 201945,
+          "chars": 12943
+        },
+        {
+          "cat": "email",
+          "model": "nvidia/nemotron-nano-12b-v2-vl:free",
+          "ok": 1,
+          "tout": 595,
+          "lat": 12212,
+          "chars": 2878
+        },
+        {
+          "cat": "email",
+          "model": "google/gemma-4-26b-a4b-it:free",
+          "ok": 1,
+          "tout": 420,
+          "lat": 31129,
+          "chars": 2255
+        },
+        {
+          "cat": "email",
+          "model": "nvidia/nemotron-3-super-120b-a12b:free",
+          "ok": 1,
+          "tout": 888,
+          "lat": 62373,
+          "chars": 3853
+        },
+        {
+          "cat": "email",
+          "model": "cohere/north-mini-code:free",
+          "ok": 1,
+          "tout": 971,
+          "lat": 37416,
+          "chars": 4937
+        },
+        {
+          "cat": "email",
+          "model": "nvidia/nemotron-nano-9b-v2:free",
+          "ok": 1,
+          "tout": 1495,
+          "lat": 36747,
+          "chars": 6052
+        },
+        {
+          "cat": "email",
+          "model": "openai/gpt-oss-20b:free",
+          "ok": 1,
+          "tout": 925,
+          "lat": 44972,
+          "chars": 4353
+        },
+        {
+          "cat": "text",
+          "model": "nvidia/nemotron-nano-9b-v2:free",
+          "ok": 1,
+          "tout": 3768,
+          "lat": 145458,
+          "chars": 9649
+        },
+        {
+          "cat": "text",
+          "model": "cohere/north-mini-code:free",
+          "ok": 1,
+          "tout": 5333,
+          "lat": 303042,
+          "chars": 20467
+        },
+        {
+          "cat": "text",
+          "model": "openai/gpt-oss-20b:free",
+          "ok": 1,
+          "tout": 4318,
+          "lat": 550513,
+          "chars": 13123
+        }
+      ]
     }
   ]
 }
